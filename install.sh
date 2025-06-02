@@ -337,6 +337,8 @@ install_nikki() {
 
     # Install packages based on package manager
     if [ -x "/bin/opkg" ]; then
+        # Logic dari upstream/main agar update ipk dari feed_url jika ada
+        # Tambahkan sesuai kebutuhan di sini
         cmdinstall "opkg update" "Update Package"
         cd "$temp_dir" || error_msg "Failed to change to temporary directory"
         cmdinstall "opkg install $temp_dir/nikki_*.ipk" "Install Mihomo Package"
