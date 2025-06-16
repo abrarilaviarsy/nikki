@@ -25,8 +25,7 @@ Transparent Proxy with Mihomo on OpenWrt.
 1. Add Feed
 
 ```shell
-# only needs to be run once
-curl -s -L https://github.com/rizkikotet-dev/OpenWrt-nikki-Mod/raw/refs/heads/main/feed.sh | ash
+wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/feed.sh | ash
 ```
 
 2. Install
@@ -46,7 +45,13 @@ apk add luci-i18n-nikki-zh-cn
 ### B. Install From Release
 
 ```shell
-bash -c "$(curl -fsSL 'https://github.com/rizkikotet-dev/OpenWrt-nikki-Mod/raw/refs/heads/main/install.sh')"
+wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/install.sh | ash
+```
+
+## Uninstall & Reset
+
+```shell
+wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/uninstall.sh | ash
 ```
 
 ## How To Use
