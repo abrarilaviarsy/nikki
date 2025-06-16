@@ -18,13 +18,19 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      
-      - name: Sync upstream to fork
+
+      - name: Add upstream remote if not exists
         run: |
-          git remote add upstream https://github.com/nikkinikki-org/OpenWrt-nikki.git
+          git remote | grep upstream || git remote add upstream https://github.com/nikkinikki-org/OpenWrt-nikki.git
+
+      - name: Fetch and merge upstream
+        run: |
           git fetch upstream
           git checkout main
-          git merge upstream/main
+          git merge --no-edit upstream/main || (echo "::error ::Merge conflict detected! Please resolve manually." && exit 1)
+      
+      - name: Push to origin
+        run: |
           git push origin main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
