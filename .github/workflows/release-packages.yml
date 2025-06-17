@@ -31,7 +31,6 @@ jobs:
     name: ${{ matrix.arch }}-${{ matrix.branch }} release
     needs: get-version
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -46,33 +45,49 @@ jobs:
             branch: openwrt-23.05
 
     steps:
-      - name: checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: build
-        uses: openwrt/gh-action-sdk@main
-        env:
-          ARCH: ${{ matrix.arch }}-${{ matrix.branch }}
-          FEEDNAME: nikki
-          PACKAGES: luci-app-nikki
-          INDEX: 1
-          KEY_BUILD: ${{ secrets.KEY_BUILD }}
-          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-          NO_REFRESH_CHECK: true
-
-      - name: compress
+      # Build step, output saved to build.log for easier debugging
+      - name: Build package (with verbose log)
         run: |
+          make -j1 V=s > build.log 2>&1
+
+      # Upload build.log as artifact for troubleshooting
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.arch }}-${{ matrix.branch }}
+          path: build.log
+
+      # List files to help debugging artifact creation
+      - name: List build output
+        run: |
+          echo "== bin/packages/${{ matrix.arch }}/nikki =="
+          ls -lh bin/packages/${{ matrix.arch }}/nikki/ || true
+          echo "== public/${{ matrix.branch }}/${{ matrix.arch }} =="
+          ls -lh public/${{ matrix.branch }}/${{ matrix.arch }}/ || true
+
+      # Compress artifact only if folder exists and not empty
+      - name: Compress packages
+        run: |
+          set -e
+          if [ ! -d "bin/packages/${{ matrix.arch }}/nikki" ] || [ -z "$(ls -A bin/packages/${{ matrix.arch }}/nikki)" ]; then
+            echo "No packages to package for ${{ matrix.arch }} ${{ matrix.branch }}!"
+            exit 1
+          fi
           tar -c -z -f nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz -C bin/packages/${{ matrix.arch }}/nikki .
           mkdir -p public/${{ matrix.branch }}/${{ matrix.arch }}
           mv bin/packages/${{ matrix.arch }}/nikki/* public/${{ matrix.branch }}/${{ matrix.arch }}/ || true
           tar -c -z -f feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz -C public/${{ matrix.branch }}/${{ matrix.arch }} .
 
-      - name: check artifacts
+      - name: Check artifacts
         run: |
-          ls -lh feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz
+          ls -lh *.tar.gz
 
       - if: github.event_name == 'push' && startsWith(github.ref_name, 'v')
-        name: release
+        name: Release GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v${{ needs.get-version.outputs.version }}"
@@ -80,7 +95,7 @@ jobs:
             nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz
           generate_release_notes: true
 
-      - name: upload
+      - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
           name: feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}
@@ -92,13 +107,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: download
+      - name: Download feed artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: feed_nikki_*
           merge-multiple: true
 
-      - name: uncompress
+      - name: Uncompress feeds
         run: |
           shopt -s nullglob
           files=(feed_nikki_*.tar.gz)
@@ -110,14 +125,14 @@ jobs:
             tar -x -z -f "$file"
           done
 
-      - name: prepare
+      - name: Prepare public directory & index
         run: |
           echo "${{ secrets.KEY_BUILD_PUB }}" > public/key-build.pub
           echo "${{ secrets.PUBLIC_KEY }}" > public/public-key.pem
           tree --dirsfirst --sort name -P '*.apk|*.ipk' --prune --noreport -H "" -T "Nikki's Feed" --charset utf-8 -o public/index.html public
           sed -i '/<p class="VERSION">/,/<\/p>/d' public/index.html
 
-      - name: feed
+      - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
