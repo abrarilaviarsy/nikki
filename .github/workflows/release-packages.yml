@@ -2,6 +2,11 @@ name: release-packages
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag untuk release (misal v1.0.0)'
+        required: false
+        default: ''
   push:
     tags:
       - v*
@@ -20,18 +25,28 @@ jobs:
       - name: List downloaded files
         run: ls -lhR
 
-      - name: Compress each package
+      - name: Compress each package jika ada .ipk
         run: |
           for d in nikki_*; do
             [ -d "$d" ] || continue
-            tar -czf "$d.tar.gz" -C "$d" .
+            if compgen -G "$d/*.ipk" > /dev/null; then
+              tar -czf "$d.tar.gz" -C "$d" .
+              echo "Compress $d -> $d.tar.gz"
+            else
+              echo "SKIP: $d tidak ada file .ipk"
+            fi
           done
 
+      - name: List .tar.gz files
+        run: ls -lh *.tar.gz || true
+
+      - name: List all files (debug)
+        run: find . -type f
+
       - name: Release to GitHub
-        if: github.event_name == 'push' && startsWith(github.ref_name, 'v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           files: |
             nikki_*.tar.gz
           generate_release_notes: true
