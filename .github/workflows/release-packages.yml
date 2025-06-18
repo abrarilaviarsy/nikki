@@ -7,134 +7,31 @@ on:
       - v*
 
 jobs:
-  get-version:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          ref: ${{ github.ref_name }}
-
-      - name: Extract version
-        id: version
-        run: |
-          VERSION=$(grep 'PKG_VERSION:=' ./luci-app-nikki/Makefile | awk -F '=' '{print $2}')
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "New Version: ${VERSION}"
-
   release:
-    name: ${{ matrix.arch }}-${{ matrix.branch }} release
-    needs: get-version
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - aarch64_cortex-a53
-          - aarch64_generic
-        branch:
-          - openwrt-23.05
-          - openwrt-24.10
-        exclude:
-          - arch: aarch64_cortex-a76
-            branch: openwrt-23.05
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Build step, output saved to build.log for easier debugging
-      - name: Build package (with verbose log)
-        run: |
-          make -j1 V=s > build.log 2>&1
-
-      # Upload build.log as artifact for troubleshooting
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-${{ matrix.arch }}-${{ matrix.branch }}
-          path: build.log
-
-      # List files to help debugging artifact creation
-      - name: List build output
-        run: |
-          echo "== bin/packages/${{ matrix.arch }}/nikki =="
-          ls -lh bin/packages/${{ matrix.arch }}/nikki/ || true
-          echo "== public/${{ matrix.branch }}/${{ matrix.arch }} =="
-          ls -lh public/${{ matrix.branch }}/${{ matrix.arch }}/ || true
-
-      # Compress artifact only if folder exists and not empty
-      - name: Compress packages
-        run: |
-          set -e
-          if [ ! -d "bin/packages/${{ matrix.arch }}/nikki" ] || [ -z "$(ls -A bin/packages/${{ matrix.arch }}/nikki)" ]; then
-            echo "No packages to package for ${{ matrix.arch }} ${{ matrix.branch }}!"
-            exit 1
-          fi
-          tar -c -z -f nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz -C bin/packages/${{ matrix.arch }}/nikki .
-          mkdir -p public/${{ matrix.branch }}/${{ matrix.arch }}
-          mv bin/packages/${{ matrix.arch }}/nikki/* public/${{ matrix.branch }}/${{ matrix.arch }}/ || true
-          tar -c -z -f feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz -C public/${{ matrix.branch }}/${{ matrix.arch }} .
-
-      - name: Check artifacts
-        run: |
-          ls -lh *.tar.gz
-
-      - if: github.event_name == 'push' && startsWith(github.ref_name, 'v')
-        name: Release GitHub
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "v${{ needs.get-version.outputs.version }}"
-          files: |
-            nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz
-          generate_release_notes: true
-
-      - name: Upload package artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}
-          path: feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz
-
-  feed:
-    needs: release
-    name: feed
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download feed artifacts
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: feed_nikki_*
+          pattern: nikki_*
           merge-multiple: true
 
-      - name: Uncompress feeds
+      - name: List downloaded files
+        run: ls -lhR
+
+      - name: Compress each package
         run: |
-          shopt -s nullglob
-          files=(feed_nikki_*.tar.gz)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No feed_nikki_*.tar.gz files found to extract."
-            exit 1
-          fi
-          for file in "${files[@]}"; do
-            tar -x -z -f "$file"
+          for d in nikki_*; do
+            [ -d "$d" ] || continue
+            tar -czf "$d.tar.gz" -C "$d" .
           done
 
-      - name: Prepare public directory & index
-        run: |
-          echo "${{ secrets.KEY_BUILD_PUB }}" > public/key-build.pub
-          echo "${{ secrets.PUBLIC_KEY }}" > public/public-key.pem
-          tree --dirsfirst --sort name -P '*.apk|*.ipk' --prune --noreport -H "" -T "Nikki's Feed" --charset utf-8 -o public/index.html public
-          sed -i '/<p class="VERSION">/,/<\/p>/d' public/index.html
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+      - name: Release to GitHub
+        if: github.event_name == 'push' && startsWith(github.ref_name, 'v')
+        uses: softprops/action-gh-release@v2
         with:
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: pages deploy public --project-name=nikkinikki
+          tag_name: ${{ github.ref_name }}
+          files: |
+            nikki_*.tar.gz
+          generate_release_notes: true
