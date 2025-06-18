@@ -25,7 +25,7 @@ jobs:
           find . -type f
           find . -type d
 
-      - name: Compress each package
+      - name: Compress each package jika ada .ipk
         run: |
           for d in nikki_*; do
             [ -d "$d" ] || continue
