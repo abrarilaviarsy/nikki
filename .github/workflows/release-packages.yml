@@ -17,18 +17,28 @@ jobs:
           pattern: nikki_*
           merge-multiple: true
 
-      - name: List downloaded files
-        run: ls -lhR
+      - name: Cek isi artifact hasil download
+        run: |
+          echo "Isi root:"
+          ls -lh
+          echo "Isi semua subfolder:"
+          find . -type f
+          find . -type d
 
       - name: Compress each package
         run: |
           for d in nikki_*; do
             [ -d "$d" ] || continue
-            tar -czf "$d.tar.gz" -C "$d" .
+            if compgen -G "$d/*.ipk" > /dev/null; then
+              tar -czf "$d.tar.gz" -C "$d" .
+              echo "Berhasil kompres $d ke $d.tar.gz"
+            else
+              echo "Folder $d tidak ada file .ipk, skip compress."
+            fi
           done
 
-      - name: List files for release
-        run: ls -lh
+      - name: List files after compress
+        run: ls -lh *.tar.gz || true
 
       - name: Release to GitHub
         uses: softprops/action-gh-release@v2
