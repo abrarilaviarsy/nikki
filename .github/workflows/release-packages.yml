@@ -2,51 +2,99 @@ name: release-packages
 
 on:
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Tag untuk release (misal v1.0.0)'
-        required: false
-        default: ''
   push:
     tags:
       - v*
 
 jobs:
-  release:
+  get-version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.ref_name }}
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep 'PKG_VERSION:=' ./luci-app-nikki/Makefile | awk -F '=' '{print $2}')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "New Version: ${VERSION}"
+
+  release:
+    name: ${{ matrix.arch }}-${{ matrix.branch }} release
+    needs: get-version
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm_cortex-a5_vfpv4
+          - arm_cortex-a7_neon-vfpv4
+          - arm_cortex-a8_vfpv3
+          - arm_cortex-a9
+          - arm_cortex-a9_vfpv3-d16
+          - arm_cortex-a9_neon
+          - arm_cortex-a15_neon-vfpv4
+          - aarch64_cortex-a53
+          - aarch64_cortex-a72
+          - aarch64_cortex-a76
+          - aarch64_generic
+          - mips_24kc
+          - mips_4kec
+          - mips_mips32
+          - mipsel_24kc
+          - mipsel_24kc_24kf
+          - mipsel_74kc
+          - mipsel_mips32
+          - mips64_octeonplus
+          - i386_pentium4
+          - x86_64
+        branch:
+          - openwrt-23.05
+          - openwrt-24.10
+          - SNAPSHOT
+        exclude:
+          - arch: aarch64_cortex-a76
+            branch: openwrt-23.05
 
     steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: nikki_*
-          merge-multiple: true
+      - name: checkout
+        uses: actions/checkout@v4
 
-      - name: List downloaded files
-        run: ls -lhR
+      - name: build
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: ${{ matrix.arch }}-${{ matrix.branch }}
+          FEEDNAME: nikki
+          PACKAGES: luci-app-nikki
+          NO_REFRESH_CHECK: true
 
-      - name: Compress each package jika ada .ipk
+      - name: compress
         run: |
-          for d in nikki_*; do
-            [ -d "$d" ] || continue
-            if compgen -G "$d/*.ipk" > /dev/null; then
-              tar -czf "$d.tar.gz" -C "$d" .
-              echo "Compress $d -> $d.tar.gz"
-            else
-              echo "SKIP: $d tidak ada file .ipk"
-            fi
-          done
+          tar -c -z -f nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz -C bin/packages/${{ matrix.arch }}/nikki .
+          mkdir -p public/${{ matrix.branch }}/${{ matrix.arch }}
+          mv bin/packages/${{ matrix.arch }}/nikki public/${{ matrix.branch }}/${{ matrix.arch }}
+          tar -c -z -f feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz public/${{ matrix.branch }}/${{ matrix.arch }}
 
-      - name: List .tar.gz files
-        run: ls -lh *.tar.gz || true
-
-      - name: List all files (debug)
-        run: find . -type f
-
-      - name: Release to GitHub
+      - name: release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          tag_name: "v${{ needs.get-version.outputs.version }}"
           files: |
-            nikki_*.tar.gz
+            nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz
           generate_release_notes: true
+
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}
+          path: feed_nikki_${{ matrix.arch }}-${{ matrix.branch }}.tar.gz
+          
