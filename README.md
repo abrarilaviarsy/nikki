@@ -27,7 +27,6 @@ Transparent Proxy with Mihomo on OpenWrt.
 1. Add Feed
 
 ```shell
-# only needs to be run once
 wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/feed.sh | ash
 ```
 
@@ -59,7 +58,7 @@ wget -O - https://github.com/nikkinikki-org/OpenWrt-nikki/raw/refs/heads/main/un
 
 ## How To Use
 
-See [Wiki](https://github.com/nikkinikki-org/OpenWrt-nikki/wiki)
+See [Wiki](https://github.com/rizkikotet-dev/OpenWrt-nikki/wiki)
 
 ## How does it work
 
@@ -75,7 +74,7 @@ Note that the steps above may change base on config.
 
 ```shell
 # add feed
-echo "src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main" >> "feeds.conf.default"
+echo "src-git nikki https://github.com/rizkikotet-dev/OpenWrt-nikki-Mod.git;main" >> "feeds.conf.default"
 # update & install feeds
 ./scripts/feeds update -a
 ./scripts/feeds install -a
