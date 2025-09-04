@@ -59,4 +59,3 @@ jobs:
         with:
           name: nikki_${{ matrix.arch }}-${{ matrix.branch }}
           path: bin/packages/${{ matrix.arch }}/nikki
-          
