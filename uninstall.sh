@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# Nikki's uninstaller
+
 # uninstall
 if [ -x "/bin/opkg" ]; then
 	opkg list-installed luci-i18n-nikki-* | cut -d ' ' -f 1 | xargs opkg remove
@@ -20,14 +22,14 @@ rm -rf /var/log/nikki
 rm -rf /var/run/nikki
 # remove feed
 if [ -x "/bin/opkg" ]; then
-	if (grep -q nikki /etc/opkg/customfeeds.conf); then
+	if grep -q nikki /etc/opkg/customfeeds.conf; then
 		sed -i '/nikki/d' /etc/opkg/customfeeds.conf
 	fi
 	wget -O "nikki.pub" "https://nikkinikki.pages.dev/key-build.pub"
 	opkg-key remove nikki.pub
 	rm -f nikki.pub
 elif [ -x "/usr/bin/apk" ]; then
-	if (grep -q nikki /etc/apk/repositories.d/customfeeds.list); then
+	if grep -q nikki /etc/apk/repositories.d/customfeeds.list; then
 		sed -i '/nikki/d' /etc/apk/repositories.d/customfeeds.list
 	fi
 	rm -f /etc/apk/keys/nikki.pem
